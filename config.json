@@ -1,11 +1,1 @@
-{
-      "google-sheets": {
-        "command": "uvx",
-        "args": ["mcp-google-sheets@latest"],
-        "env": {
-          "SERVICE_ACCOUNT_PATH": "/home/coga/workspace/ReservationMCP_SpreadSheet/mcp_sheets.json",
-          "DRIVE_FOLDER_ID": "1lXs3JrOuvBSew2EJUZhEeaEQfGaSqIcuKcVicOkRxMQ"
-        },
-        "healthcheck_url": "http://localhost:8000/health" 
-      }
-}
+???
