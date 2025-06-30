@@ -24,7 +24,6 @@ from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.runnables import RunnableConfig
 
 # 환경 변수 설정
-os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = "/home/coga/workspace/ReservationMCP_SpreadSheet/mcp_sheets.json"
 load_dotenv(override=True)
 
 # Pydantic 모델 정의 (OpenAI API 호환)
