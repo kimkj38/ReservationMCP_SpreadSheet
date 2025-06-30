@@ -24,7 +24,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.runnables import RunnableConfig
 
 # 환경 변수 설정
-os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = "/home/ubuntu/Desktop/mcp_sheets.json"
+os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = "/home/coga/workspace/ReservationMCP_SpreadSheet/mcp_sheets.json"
 load_dotenv(override=True)
 
 # Pydantic 모델 정의 (OpenAI API 호환)
@@ -88,6 +88,7 @@ Guidelines:
 - Answer in the same language as the question.
 - Answer should be concise and to the point.
 - Avoid response your output with any other information than the answer and the source.  
+- Answer as if you’re talking to a customer on the phone — keep it polite and conversational.
 </INSTRUCTIONS>
 
 <PROCESS>
@@ -207,12 +208,19 @@ class HospitalReservationAgent:
                 stream_mode="messages",
                 config=config
             ):
-                # 에이전트 메시지 처리
-                if 'tool_calls' in chunk[0].additional_kwargs:
-                    print()
+                if isinstance(chunk[0], ToolMessage):
+                        continue
+                if chunk[0].additional_kwargs:
+                    pass
                 else:
                     token = chunk[0].content
                     yield token
+                # # 에이전트 메시지 처리
+                # if 'tool_calls' in chunk[0].additional_kwargs:
+                #     print()
+                # else:
+                #     token = chunk[0].content
+                #     yield token
                 
         except Exception as e:
             error_msg = f"대화 중 오류가 발생했습니다: {str(e)}"

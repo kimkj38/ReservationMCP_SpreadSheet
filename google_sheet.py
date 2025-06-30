@@ -73,11 +73,11 @@ def save_config_to_json(config):
 
 
 SYSTEM_PROMPT = """<ROLE>
-You are a hospital reservation agent with an ability to use tools. 
+You are hair shop reservation agent with an ability to use tools. 
 You will be given a question and you will use the tools to answer the question.
 Pick the most relevant tool to answer the question. 
 If you are failed to answer the question, try different tools to get context.
-Your answer should be very polite and professional.
+Answer as if you’re talking to a customer on the phone — keep it polite and conversational.
 </ROLE>
 
 ----
@@ -93,27 +93,25 @@ Step 2: Pick the most relevant tool
 
 Step 3: Answer the question
 - Answer the question in the same language as the question.
-- Your answer should be very polite and professional.
+- Answer as if you’re talking to a customer on the phone — keep it polite and conversational.
 
 Step 4: Provide the source of the answer(if applicable)
 - If you've used the tool, provide the source of the answer.
 - Valid sources are either a website(URL) or a document(PDF, etc).
 
 Guidelines:
-- If you've used the tool, your answer should be based on the tool's output(tool's output is more important than your own knowledge).
-- If you've used the tool, and the source is valid URL, provide the source(URL) of the answer.
-- Skip providing the source if the source is not URL.
 - Answer in the same language as the question.
 - Answer should be concise and to the point.
 - Avoid response your output with any other information than the answer and the source.  
+- Use the format 2025-MM-DD to record the reservation date. This year is 2025. Do not change it.
 </INSTRUCTIONS>
 
 <PROCESS>
 A. 예약하기
     1. 문서ID는 "1lXs3JrOuvBSew2EJUZhEeaEQfGaSqIcuKcVicOkRxMQ" 시트의 이름은 "시트1"입니다.
-    2. 성명, 생년월일, 예약일, 예약시간은 필수요소입니다. 정보가 부족하다면 정중하게 요청하세요.
+    2. 성명, 예약일, 예약시간, 시술 종류는 필수요소입니다. 정보가 부족하다면 정중하게 요청하세요.
     3. 필요한 정보가 다 수집되었다면 get_sheet_data 툴을 활용하여 기존 예약 목록을 확인하세요.
-    4. 동일한 예약일과 예약시간에 이미 예약된 정보가 존재한다면, 예약을 절대 진행하지 마세요.
+    4. 예약일과 예약시간이 모두 동일한 정보가 존재한다면, 예약을 절대 진행하지 마세요.
        - 중복 예약이 감지되었을 경우 반드시 다음과 같이 응답하세요:
          - "해당 시간에는 이미 예약이 있습니다. 다른 시간대를 선택해주세요."
        - 가능한 다른 시간대를 2~3개 추천하세요.
@@ -161,10 +159,8 @@ class HospitalReservationAgent:
             self.session_id = str(uuid.uuid4())
             print(f"🆔 세션 ID 생성: {self.session_id}")
             
-            # MCP 클라이언트 초기화 - 첫 번째 코드의 성공 패턴 사용
+            # MCP 클라이언트 초기화
             self.client = MultiServerMCPClient(mcp_config)
-            
-            # 컨텍스트 매니저 없이 클라이언트 시작
             await self.client.__aenter__()
             tools = self.client.get_tools()
             print(f"🔧 도구 로드 완료: {len(tools)}개")
@@ -226,7 +222,7 @@ class HospitalReservationAgent:
                 print(f"⚠️ 클라이언트 정리 중 오류: {e}")
     
     async def chat(self, message):
-        """사용자와 대화하기"""
+        """사용자와 대화하기 - 수정된 버전"""
         if not self.agent:
             raise Exception("에이전트가 초기화되지 않았습니다. initialize()를 먼저 호출하세요.")
         
@@ -240,10 +236,23 @@ class HospitalReservationAgent:
                 config=self.config
             )
             
-            # 에이전트의 마지막 메시지 반환
+            # 응답에서 AI 메시지만 추출
             if response and "messages" in response:
-                last_message = response["messages"][-1]
-                return last_message.content
+                # AI 메시지만 필터링 (도구 메시지 제외)
+                ai_messages = [
+                    msg for msg in response["messages"] 
+                    if hasattr(msg, 'type') and msg.type == 'ai'
+                ]
+                
+                if ai_messages:
+                    return ai_messages[-1].content
+                else:
+                    # AI 메시지가 없는 경우 마지막 메시지 반환
+                    last_message = response["messages"][-1]
+                    if hasattr(last_message, 'content'):
+                        return last_message.content
+                    else:
+                        return "응답을 처리하는 중입니다."
             else:
                 return "죄송합니다. 응답을 생성할 수 없습니다."
                 
@@ -255,45 +264,67 @@ class HospitalReservationAgent:
             return error_msg
     
     async def stream_chat(self, message):
-        """스트리밍 방식으로 대화하기"""
+        """스트리밍 방식으로 대화하기 - 수정된 버전"""
         if not self.agent:
             raise Exception("에이전트가 초기화되지 않았습니다. initialize()를 먼저 호출하세요.")
         
         try:
             human_message = HumanMessage(content=message)
             
-            # # 토큰 출력
+            # 전체 응답을 위한 변수
+            full_response = ""
+            final_ai_content = ""
+            
+            # # 일반 출력
             # async for chunk in self.agent.astream(
             #     {"messages": [human_message]}, 
-            #     stream_mode="messages",
             #     config=self.config
             # ):
-            #     # 에이전트 메시지 처리
-            #     if 'tool_calls' in chunk[0].additional_kwargs:
-            #         print()
-            #     else:
-            #         token = chunk[0].content
-            #         return token
-            
-            # 전체 출력
+            #     # 에이전트의 최종 메시지 처리
+            #     if 'agent' in chunk:
+            #         messages = chunk['agent'].get('messages', [])
+            #         for msg in messages:
+            #             # AI 메시지만 처리
+            #             if hasattr(msg, 'type') and msg.type == 'ai':
+            #                 if hasattr(msg, 'content') and msg.content:
+            #                     final_ai_content = msg.content
+            #                     # print(msg.content)
+                
+            #     # 도구 실행 결과 처리
+            #     elif 'tools' in chunk:
+            #         # 도구 실행 중임을 표시
+            #         print("🔧 도구 실행 중...", end="", flush=True)
+
+            # 토큰 출력
             async for chunk in self.agent.astream(
                 {"messages": [human_message]}, 
+                stream_mode="messages",
                 config=self.config
             ):
-                # 에이전트 메시지 처리
-                if 'agent' in chunk:
-                    print(chunk['agent']['messages'][0].content)
-                    return chunk['agent']['messages'][0].content
-                else:
-                    print()
 
+                if isinstance(chunk[0], ToolMessage):
+                    continue
+
+                # 에이전트 메시지 처리
+                if 'tool_calls' in chunk[0].additional_kwargs:
+                    # pass
+                    print("🔧 도구 실행 중...", end="", flush=True)
+                else:
+                    final_ai_content = chunk[0].content
+
+                # 최종 응답 반환
+                if type(final_ai_content) == str:
+                    yield final_ai_content
+                else:
+                    yield "작업이 완료되었습니다."
             
         except Exception as e:
             error_msg = f"스트리밍 중 오류가 발생했습니다: {str(e)}"
             print(f"❌ {error_msg}")
+            import traceback
+            traceback.print_exc()
+            yield error_msg
 
-
-# 첫 번째 코드의 성공적인 시트 읽기 테스트 함수 추가
 async def test_sheet_access():
     """Google Sheets 접근 테스트"""
     try:
@@ -341,7 +372,7 @@ async def test_sheet_access():
                 SPREADSHEET_ID = "1lXs3JrOuvBSew2EJUZhEeaEQfGaSqIcuKcVicOkRxMQ"
                 SHEET_NAME = "시트1"
                 
-                # 다양한 매개변수 조합 시도 (오류 메시지에서 'sheet' 필드가 필수라고 나옴)
+                # 다양한 매개변수 조합 시도
                 param_combinations = [
                     {"spreadsheet_id": SPREADSHEET_ID, "sheet": SHEET_NAME, "range": "A1:Z100"},
                     {"spreadsheet_id": SPREADSHEET_ID, "sheet": SHEET_NAME},
@@ -400,16 +431,6 @@ async def run_interactive_chat():
     agent = HospitalReservationAgent()
     
     try:
-        # # 먼저 시트 접근 테스트
-        # print("🔍 Google Sheets 접근 테스트 중...")
-        # sheet_test_result = await test_sheet_access()
-        
-        # if not sheet_test_result:
-        #     print("⚠️ Google Sheets 접근에 문제가 있을 수 있습니다.")
-        #     response = input("계속 진행하시겠습니까? (y/n): ")
-        #     if response.lower() != 'y':
-        #         return
-        
         # 에이전트 초기화
         await agent.initialize()
         
@@ -427,14 +448,15 @@ async def run_interactive_chat():
                 if not user_input:
                     continue
                 
-                # 에이전트 응답 출력
-                print("🤖 에이전트: ", end="")
-                # 전체 출력
-                await agent.stream_chat(user_input)
-                
+                # 에이전트 응답 출력 - 일반 모드로 변경
+                # print("🤖 에이전트: ", end="")
+                # response = await agent.stream_chat(user_input)
+                # print(response)
+
                 #토큰 출력
-                # async for token in agent.stream_chat(user_input):
-                #     print(token, end="", flush=True)
+                print("🤖 에이전트: ", end="")
+                async for token in agent.stream_chat(user_input):
+                    print(token, end="", flush=True)
                 
             except KeyboardInterrupt:
                 print("\n\n👋 대화가 중단되었습니다. 좋은 하루 되세요!")
