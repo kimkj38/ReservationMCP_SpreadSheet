@@ -155,7 +155,7 @@ class HospitalReservationAgent:
             self.agent = create_react_agent(
                 model,
                 tools,
-                checkpointer=MemorySaver(),
+                # checkpointer=MemorySaver(),
                 prompt=SYSTEM_PROMPT,
             )
             print("🎯 에이전트 생성 완료")
@@ -189,18 +189,21 @@ class HospitalReservationAgent:
         try:
             # 전체 대화 히스토리를 LangChain 메시지로 변환
             langchain_messages = []
-            langchain_messages.append(HumanMessage(content=messages[-1].content))
+            # langchain_messages.append(HumanMessage(content=messages[-1].content))
             
 
-            # for msg in messages:
-            #     if msg.role == "user":
-            #         langchain_messages.append(HumanMessage(content=msg.content))
-            #     elif msg.role == "assistant":
-            #         from langchain_core.messages import AIMessage
-            #         langchain_messages.append(AIMessage(content=msg.content))
-            #     elif msg.role == "system":
-            #         from langchain_core.messages import SystemMessage
-            #         langchain_messages.append(SystemMessage(content=msg.content))
+            for msg in messages:
+                if msg.role == "user":
+                    langchain_messages.append(HumanMessage(content=msg.content))
+                elif msg.role == "assistant":
+                    from langchain_core.messages import AIMessage
+                    langchain_messages.append(AIMessage(content=msg.content))
+                elif msg.role == "system":
+                    # from langchain_core.messages import SystemMessage
+                    # langchain_messages.append(SystemMessage(content=msg.content))
+                    continue
+
+            print("@@@", langchain_messages)
             
             # 메시지가 없으면 에러
             if not langchain_messages:
@@ -209,14 +212,19 @@ class HospitalReservationAgent:
             config = self.get_session_config(session_id)
             
             # 전체 메시지 히스토리 전달
+            flag = 0
             async for chunk in self.agent.astream(
                 {"messages": langchain_messages},  
                 stream_mode="messages",
                 config=config
             ):
                 if isinstance(chunk[0], ToolMessage):
-                    yield "요청을 처리 중입니다. 잠시만 기다려주세요."
-                if chunk[0].additional_kwargs:
+                    if flag == 0:
+                        yield "요청을 처리 중입니다. 잠시만 기다려주세요."
+                        flag = 1
+                    else:
+                        continue
+                elif chunk[0].additional_kwargs:
                     pass
                 else:
                     token = chunk[0].content
